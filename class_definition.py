@@ -10,6 +10,10 @@ def get_time(now):
     mins = minutes % 60
     return f"{hours:02d}:{mins:02d}"
 
+def time_to_minutes(time_str):
+    hours, mins = map(int, time_str.split(':'))
+    return hours * 60 + mins
+
 class Passenger:
     def __init__(self, id, origin, destination, spawn_time, transport_net):
         self.satisfaction = 100
@@ -21,7 +25,7 @@ class Passenger:
         self.route = nx.dijkstra_path(transport_net.graph, origin, destination, weight='travel_time')
 
 class Vehicle:
-    def __init__(self, id, stops, transport_net, max_capacity=30):
+    def __init__(self, id, stops, transport_net, max_capacity=30, wait_time=15):
         self.id = id
         self.route = stops
         self.transport_net = transport_net
@@ -31,6 +35,7 @@ class Vehicle:
         self.position_index = 0
         self.progress = 0.0
         self.direction = 1
+        self.wait_time = wait_time
 
     def has_delay(self, current_stop, next_stop, current_minute):
         is_rush = (420 <= current_minute <= 540) or (960 <= current_minute <= 1080)
@@ -80,6 +85,15 @@ class Vehicle:
 
                     for p in boarding:
                         self.transport_net.passenger_queues[next_stop].remove(p)
+
+                # wait at the final stop
+                if len(self.route) > 1:
+                    remaining_wait = self.wait_time
+                    while remaining_wait > 0:
+                        self.transport_net.log_event(
+                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left)")
+                        yield env.timeout(1)
+                        remaining_wait -= 1
             else:
                 for i in range(len(self.route) - 1, 0, -1):
                     current_stop = self.route[i]
@@ -120,8 +134,26 @@ class Vehicle:
 
                     for p in boarding:
                         self.transport_net.passenger_queues[next_stop].remove(p)
+
+                # wait at the final stop
+                if len(self.route) > 1:
+                    remaining_wait = self.wait_time
+                    while remaining_wait > 0:
+                        self.transport_net.log_event(
+                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left)")
+                        yield env.timeout(1)
+                        remaining_wait -= 1
                         
             self.direction *= -1
+
+
+class BusLine:
+    def __init__(self, name, stops, schedule, wait_time=5):
+        self.name = name
+        self.stops = stops
+        self.schedule = [time_to_minutes(t) for t in schedule]
+        self.wait_time = wait_time
+
 
 class TransportNet:
     def __init__(self):
@@ -132,6 +164,7 @@ class TransportNet:
         self.log_buffer = []
         self.last_logged_minute = -1
         self.simulation_running = False
+        self.bus_lines = []
 
     def add_connection(self, A, B, travel_time, busy=False):
         self.graph.add_edge(A, B, travel_time=travel_time, busy=busy)
@@ -141,8 +174,20 @@ class TransportNet:
         if B not in self.passenger_queues:
             self.passenger_queues[B] = []
 
-    def add_vehicle(self, vehicle):
+    def add_bus_line(self, name, stops, schedule, wait_time=5):
+        self.bus_lines.append(BusLine(name, stops, schedule, wait_time))
+
+    def schedule_vehicles(self):
+        for line in self.bus_lines:
+            for dep_time in line.schedule:
+                self.env.process(self.create_vehicle(line, dep_time))
+
+    def create_vehicle(self, line, departure_time):
+        yield self.env.timeout(departure_time)
+        vehicle_id = f"{line.name}_{get_time(departure_time)}"
+        vehicle = Vehicle(vehicle_id, line.stops, self, wait_time=line.wait_time)
         self.vehicles.append(vehicle)
+        self.env.process(vehicle.vehicle_process(self.env))
 
     def passenger_generator(self, interval=5, peak_hours=(7*60, 9*60, 16*60, 18*60)):
         id = 0
@@ -167,6 +212,31 @@ class TransportNet:
             self.log_event(f"{p.id} appears at {origin} -> {destination}")
             id += 1
 
+    def report_status(self):
+        while True:
+            print(f"\n=== Status Report at {get_time(self.env.now)} ===")
+
+            # Report on bus stops
+            for stop in sorted(self.passenger_queues):
+                passengers = self.passenger_queues[stop]
+                dest_counts = {}
+                for p in passengers:
+                    if p.destination not in dest_counts:
+                        dest_counts[p.destination] = 0
+                    dest_counts[p.destination] += 1
+                dest_str = ", ".join([f"{k}: {v}" for k, v in dest_counts.items()])
+                passengers_info = "No passengers"
+                if len(dest_counts) > 0:
+                    passengers_info = f"{len(passengers)} waiting - {dest_str}"
+                print(f"Bus stop {stop}: {passengers_info}")
+
+            # Report on vehicles
+            for vehicle in self.vehicles:
+                print(f"Line {vehicle.id}: {vehicle.current_stop}, direction: {vehicle.direction}, "
+                      f"passengers: {len(vehicle.passengers)}/{vehicle.max_capacity}")
+            print("================================\n")
+            yield self.env.timeout(1)
+
     def log_event(self, message):
         self.log_buffer.append(message)
 
@@ -174,6 +244,8 @@ class TransportNet:
         for v in self.vehicles:
             self.env.process(v.vehicle_process(self.env))
         self.env.process(self.passenger_generator())
+        self.env.process(self.report_status())
+        self.schedule_vehicles()
         
         def clock_tick():
             while self.simulation_running:
