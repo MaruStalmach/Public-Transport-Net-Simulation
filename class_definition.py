@@ -65,6 +65,7 @@ class Vehicle:
                     self.transport_net.log_event(f"{self.id} arrived at {next_stop}")
 
                     exiting = [p for p in self.passengers if p.destination == next_stop]
+                    exiting_count = len(exiting)
                     for p in exiting:
                         self.transport_net.log_event(f"{p.id} gets off at {next_stop}")
                         self.passengers.remove(p)
@@ -86,19 +87,37 @@ class Vehicle:
                     for p in boarding:
                         self.transport_net.passenger_queues[next_stop].remove(p)
 
-                # wait at the final stop
+                    boarding_count = len(boarding)
+                    self.transport_net.log_event(f"{self.id} arrived at {next_stop}: exiting {exiting_count}, boarding {boarding_count}")
+
+                # last stop
                 if len(self.route) > 1:
+                    # board up to capacity
+                    new_board = 0
+                    q = self.transport_net.passenger_queues[self.current_stop]
+                    while q and len(self.passengers) < self.max_capacity:
+                        p = q.pop(0)
+                        self.passengers.append(p)
+                        new_board += 1
+                        self.transport_net.log_event(f"{p.id} boards at {self.current_stop}")
+
+                    # boarding during wait
                     remaining_wait = self.wait_time
                     while remaining_wait > 0:
+                        q = self.transport_net.passenger_queues[self.current_stop]
+                        while q and len(self.passengers) < self.max_capacity:
+                            p = q.pop(0)
+                            self.passengers.append(p)
+                            self.transport_net.log_event(f"{p.id} boards bus {self.id} at {self.current_stop} during wait")
                         self.transport_net.log_event(
-                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left)")
+                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left), passengers: {len(self.passengers)}")
                         yield env.timeout(1)
                         remaining_wait -= 1
             else:
                 for i in range(len(self.route) - 1, 0, -1):
                     current_stop = self.route[i]
                     next_stop = self.route[i - 1]
-                    
+                    self.transport_net.log_event(f"{self.id} departing from {current_stop} -> {next_stop}")
                     if not self.transport_net.graph.has_edge(current_stop, next_stop):
                         raise KeyError(f"no connection between {current_stop} and {next_stop}")
                     
@@ -114,6 +133,7 @@ class Vehicle:
                     self.transport_net.log_event(f"{self.id} arrived at {next_stop}")
 
                     exiting = [p for p in self.passengers if p.destination == next_stop]
+                    exiting_count = len(exiting)
                     for p in exiting:
                         self.transport_net.log_event(f"{p.id} gets off at {next_stop}")
                         self.passengers.remove(p)
@@ -135,12 +155,30 @@ class Vehicle:
                     for p in boarding:
                         self.transport_net.passenger_queues[next_stop].remove(p)
 
-                # wait at the final stop
+                    boarding_count = len(boarding)
+                    self.transport_net.log_event(f"{self.id} arrived at {next_stop}: {exiting_count} off, {boarding_count} on")
+
+                # last stop
                 if len(self.route) > 1:
+                    # board up to capacity
+                    new_board = 0
+                    q = self.transport_net.passenger_queues[self.current_stop]
+                    while q and len(self.passengers) < self.max_capacity:
+                        p = q.pop(0)
+                        self.passengers.append(p)
+                        new_board += 1
+                        self.transport_net.log_event(f"{p.id} boards at {self.current_stop}")
+
+                    # boarding during wait
                     remaining_wait = self.wait_time
                     while remaining_wait > 0:
+                        q = self.transport_net.passenger_queues[self.current_stop]
+                        while q and len(self.passengers) < self.max_capacity:
+                            p = q.pop(0)
+                            self.passengers.append(p)
+                            self.transport_net.log_event(f"{p.id} boards bus {self.id} at {self.current_stop} during wait")
                         self.transport_net.log_event(
-                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left)")
+                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left), passengers: {len(self.passengers)}")
                         yield env.timeout(1)
                         remaining_wait -= 1
                         
@@ -192,25 +230,27 @@ class TransportNet:
     def passenger_generator(self, interval=5, peak_hours=(7*60, 9*60, 16*60, 18*60)):
         id = 0
         while True:
-            current_minute = self.env.now % 1440
-            is_peak = (peak_hours[0] <= current_minute <= peak_hours[1]) or \
-                      (peak_hours[2] <= current_minute <= peak_hours[3])
-            is_night = 0 <= current_minute <= 4 * 60
+            # current_minute = self.env.now % 1440
+            # is_peak = (peak_hours[0] <= current_minute <= peak_hours[1]) or \
+            #           (peak_hours[2] <= current_minute <= peak_hours[3])
+            # is_night = 0 <= current_minute <= 4 * 60
+            #
+            # if is_peak:
+            #     spawn_interval = random.randint(1, max(1, interval // 2))
+            # elif is_night:
+            #     spawn_interval = random.randint(10, 30)
+            # else:
+            #     spawn_interval = random.randint(5, 10)
+            #
+            # yield self.env.timeout(spawn_interval)
 
-            if is_peak:
-                spawn_interval = random.randint(1, max(1, interval // 2))
-            elif is_night:
-                spawn_interval = random.randint(10, 30)
-            else:
-                spawn_interval = random.randint(5, 10)
-
-            yield self.env.timeout(spawn_interval)
-
-            origin, destination = random.sample(list(self.graph.nodes()), 2)
-            p = Passenger(f"Passenger{id}", origin, destination, self.env.now, transport_net=self)
-            self.passenger_queues[origin].append(p)
-            self.log_event(f"{p.id} appears at {origin} -> {destination}")
-            id += 1
+            yield self.env.timeout(1)
+            for _ in range(5):
+                origin, destination = random.sample(list(self.graph.nodes()), 2)
+                p = Passenger(f"Passenger{id}", origin, destination, self.env.now, transport_net=self)
+                self.passenger_queues[origin].append(p)
+                self.log_event(f"{p.id} appears at {origin} -> {destination}")
+                id += 1
 
     def report_status(self):
         while True:
