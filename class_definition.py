@@ -43,6 +43,28 @@ class Vehicle:
         is_busy = self.transport_net.graph[current_stop][next_stop]["busy"]
         return base_time * 1.5 if is_rush or is_busy else base_time
 
+    def record_position(self, env, stop_info, lat, lon, next_stop, in_transit=False, progress=0):
+
+        destination_counts = {}
+        for p in self.passengers:
+            if p.destination not in destination_counts:
+                destination_counts[p.destination] = 0
+            destination_counts[p.destination] += 1
+
+        self.transport_net.bus_tracks[self.id].append({
+            "time": int(env.now),
+            "stop": stop_info,
+            "lat": lat,
+            "lon": lon,
+            "direction": self.direction,
+            "passenger_count": len(self.passengers),
+            "max_capacity": self.max_capacity,
+            "destinations": dict(sorted(destination_counts.items())),
+            "next_stop": next_stop,
+            "in_transit": in_transit,
+            "progress": progress if in_transit else 0
+        })
+
     def vehicle_process(self, env):
         while True:
             if self.direction == 1:
@@ -67,10 +89,35 @@ class Vehicle:
                 for step in range(steps):
                     self.position_index = i
                     self.progress = step / steps
+
+                    # aproximate the position between stops
+                    if current_stop in self.transport_net.stop_locations and next_stop in self.transport_net.stop_locations:
+                        start_lat, start_lon = self.transport_net.stop_locations[current_stop]
+                        end_lat, end_lon = self.transport_net.stop_locations[next_stop]
+
+                        progress = step / steps
+                        lat = start_lat + (end_lat - start_lat) * progress
+                        lon = start_lon + (end_lon - start_lon) * progress
+
+                        # record position during movement
+                        self.record_position(env,f"{current_stop} -> {next_stop}", lat, lon, next_stop, in_transit=True, progress=progress)
+
                     yield env.timeout(travel_time / steps)
 
                 self.current_stop = next_stop
                 self.transport_net.log_event(f"{self.id} arrived at {next_stop}")
+
+                lat, lon = self.transport_net.stop_locations.get(next_stop, (None, None))
+
+                if self.direction == 1 and i + 2 < len(self.route):
+                    next_stop_value = self.route[i + 2]
+                elif self.direction == -1 and i - 2 >= 0:
+                    next_stop_value = self.route[i - 2]
+                else:
+                    next_stop_value = "Terminal"
+
+                # record position at the stop
+                self.record_position(env, next_stop, lat, lon, next_stop_value, in_transit=False)
 
                 exiting = [p for p in self.passengers if p.destination == next_stop]
                 exiting_count = len(exiting)
@@ -142,6 +189,9 @@ class TransportNet:
         self.last_logged_minute = -1
         self.simulation_running = False
         self.bus_lines = []
+        self.stop_locations = {}
+        self.bus_tracks = {}
+        self.stop_snapshots = {}
 
     def add_connection(self, A, B, travel_time, busy=False):
         self.graph.add_edge(A, B, travel_time=travel_time, busy=busy)
@@ -164,6 +214,7 @@ class TransportNet:
         vehicle_id = f"{line.name}_{get_time(departure_time)}"
         vehicle = Vehicle(vehicle_id, line.stops, self, wait_time=line.wait_time)
         self.vehicles.append(vehicle)
+        self.bus_tracks[vehicle_id] = []
         self.env.process(vehicle.vehicle_process(self.env))
 
     def passenger_generator(self, interval=5, peak_hours=(7*60, 9*60, 16*60, 18*60)):
@@ -195,6 +246,10 @@ class TransportNet:
         while True:
             print(f"\n=== Status Report at {get_time(self.env.now)} ===")
 
+            # record passenger queue information for visualization
+            current_time = int(self.env.now)
+            self.stop_snapshots[current_time] = {}
+
             # Report on bus stops
             for stop in sorted(self.passenger_queues):
                 passengers = self.passenger_queues[stop]
@@ -208,6 +263,12 @@ class TransportNet:
                 if len(dest_counts) > 0:
                     passengers_info = f"{len(passengers)} waiting - {dest_str}"
                 print(f"Bus stop {stop}: {passengers_info}")
+
+                # store for visualization
+                self.stop_snapshots[current_time][stop] = {
+                    "count": len(passengers),
+                    "destinations": dict(sorted(dest_counts.items()))
+                }
 
             # Report on vehicles
             for vehicle in self.vehicles:
