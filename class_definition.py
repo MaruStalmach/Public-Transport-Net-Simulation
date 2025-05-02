@@ -46,142 +46,81 @@ class Vehicle:
     def vehicle_process(self, env):
         while True:
             if self.direction == 1:
-                for i in range(len(self.route) - 1):
-                    current_stop = self.route[i]
-                    next_stop = self.route[i + 1]
-                    
-                    if not self.transport_net.graph.has_edge(current_stop, next_stop):
-                        raise KeyError(f"no connection between {current_stop} and {next_stop}")
-                    
-                    travel_time = self.has_delay(current_stop, next_stop, env.now % 1440)
-
-                    steps = 10
-                    for step in range(steps):
-                        self.position_index = i
-                        self.progress = step / steps
-                        yield env.timeout(travel_time / steps)
-
-                    self.current_stop = next_stop
-                    self.transport_net.log_event(f"{self.id} arrived at {next_stop}")
-
-                    exiting = [p for p in self.passengers if p.destination == next_stop]
-                    exiting_count = len(exiting)
-                    for p in exiting:
-                        self.transport_net.log_event(f"{p.id} gets off at {next_stop}")
-                        self.passengers.remove(p)
-
-                    waiting = self.transport_net.passenger_queues[next_stop]
-                    boarding = []
-
-                    for p in waiting:
-                        if p.destination in self.route:
-                            passenger_idx = self.route.index(p.destination)
-                            stop_idx = self.route.index(next_stop)
-
-                            if passenger_idx > stop_idx:  
-                                if len(self.passengers) < self.max_capacity:
-                                    boarding.append(p)
-                                    self.passengers.append(p)
-                                    self.transport_net.log_event(f"{p.id} boards at {next_stop}")
-
-                    for p in boarding:
-                        self.transport_net.passenger_queues[next_stop].remove(p)
-
-                    boarding_count = len(boarding)
-                    self.transport_net.log_event(f"{self.id} arrived at {next_stop}: exiting {exiting_count}, boarding {boarding_count}")
-
-                # last stop
-                if len(self.route) > 1:
-                    # board up to capacity
-                    new_board = 0
-                    q = self.transport_net.passenger_queues[self.current_stop]
-                    while q and len(self.passengers) < self.max_capacity:
-                        p = q.pop(0)
-                        self.passengers.append(p)
-                        new_board += 1
-                        self.transport_net.log_event(f"{p.id} boards at {self.current_stop}")
-
-                    # boarding during wait
-                    remaining_wait = self.wait_time
-                    while remaining_wait > 0:
-                        q = self.transport_net.passenger_queues[self.current_stop]
-                        while q and len(self.passengers) < self.max_capacity:
-                            p = q.pop(0)
-                            self.passengers.append(p)
-                            self.transport_net.log_event(f"{p.id} boards bus {self.id} at {self.current_stop} during wait")
-                        self.transport_net.log_event(
-                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left), passengers: {len(self.passengers)}")
-                        yield env.timeout(1)
-                        remaining_wait -= 1
+                path_sequence = range(len(self.route) - 1)
             else:
-                for i in range(len(self.route) - 1, 0, -1):
-                    current_stop = self.route[i]
+                path_sequence = range(len(self.route) - 1, 0, -1)
+            for i in path_sequence:
+                current_stop = self.route[i]
+                if self.direction == 1:
+                    next_stop = self.route[i + 1]
+                else:
                     next_stop = self.route[i - 1]
+
+                if self.direction != 1:
                     self.transport_net.log_event(f"{self.id} departing from {current_stop} -> {next_stop}")
-                    if not self.transport_net.graph.has_edge(current_stop, next_stop):
-                        raise KeyError(f"no connection between {current_stop} and {next_stop}")
-                    
-                    travel_time = self.has_delay(current_stop, next_stop, env.now % 1440)
+                if not self.transport_net.graph.has_edge(current_stop, next_stop):
+                    raise KeyError(f"no connection between {current_stop} and {next_stop}")
 
-                    steps = 10
-                    for step in range(steps):
-                        self.position_index = i
-                        self.progress = step / steps
-                        yield env.timeout(travel_time / steps)
+                travel_time = self.has_delay(current_stop, next_stop, env.now % 1440)
 
-                    self.current_stop = next_stop
-                    self.transport_net.log_event(f"{self.id} arrived at {next_stop}")
+                steps = 10
+                for step in range(steps):
+                    self.position_index = i
+                    self.progress = step / steps
+                    yield env.timeout(travel_time / steps)
 
-                    exiting = [p for p in self.passengers if p.destination == next_stop]
-                    exiting_count = len(exiting)
-                    for p in exiting:
-                        self.transport_net.log_event(f"{p.id} gets off at {next_stop}")
-                        self.passengers.remove(p)
+                self.current_stop = next_stop
+                self.transport_net.log_event(f"{self.id} arrived at {next_stop}")
 
-                    waiting = self.transport_net.passenger_queues[next_stop]
-                    boarding = []
+                exiting = [p for p in self.passengers if p.destination == next_stop]
+                exiting_count = len(exiting)
+                for p in exiting:
+                    self.transport_net.log_event(f"{p.id} gets off at {next_stop}")
+                    self.passengers.remove(p)
 
-                    for p in waiting:
-                        if p.destination in self.route:
-                            passenger_idx = self.route.index(p.destination)
-                            stop_idx = self.route.index(next_stop)
+                waiting = self.transport_net.passenger_queues[next_stop]
+                boarding = []
 
-                            if passenger_idx < stop_idx: 
-                                if len(self.passengers) < self.max_capacity:
-                                    boarding.append(p)
-                                    self.passengers.append(p)
-                                    self.transport_net.log_event(f"{p.id} boards at {next_stop}")
+                for p in waiting:
+                    if p.destination in self.route:
+                        passenger_idx = self.route.index(p.destination)
+                        stop_idx = self.route.index(next_stop)
+                        if (self.direction == 1 and passenger_idx > stop_idx) or (self.direction == -1 and passenger_idx < stop_idx):
+                            if len(self.passengers) < self.max_capacity:
+                                boarding.append(p)
+                                self.passengers.append(p)
+                                self.transport_net.log_event(f"{p.id} boards at {next_stop}")
 
-                    for p in boarding:
-                        self.transport_net.passenger_queues[next_stop].remove(p)
+                for p in boarding:
+                    self.transport_net.passenger_queues[next_stop].remove(p)
 
-                    boarding_count = len(boarding)
-                    self.transport_net.log_event(f"{self.id} arrived at {next_stop}: {exiting_count} off, {boarding_count} on")
+                boarding_count = len(boarding)
+                self.transport_net.log_event(f"{self.id} arrived at {next_stop}: exiting {exiting_count}, boarding {boarding_count}")
 
-                # last stop
-                if len(self.route) > 1:
-                    # board up to capacity
-                    new_board = 0
+            # last stop
+            if len(self.route) > 1:
+                # board up to capacity
+                new_board = 0
+                q = self.transport_net.passenger_queues[self.current_stop]
+                while q and len(self.passengers) < self.max_capacity:
+                    p = q.pop(0)
+                    self.passengers.append(p)
+                    new_board += 1
+                    self.transport_net.log_event(f"{p.id} boards at {self.current_stop}")
+
+                # boarding during wait
+                remaining_wait = self.wait_time
+                while remaining_wait > 0:
                     q = self.transport_net.passenger_queues[self.current_stop]
                     while q and len(self.passengers) < self.max_capacity:
                         p = q.pop(0)
                         self.passengers.append(p)
-                        new_board += 1
-                        self.transport_net.log_event(f"{p.id} boards at {self.current_stop}")
+                        self.transport_net.log_event(f"{p.id} boards bus {self.id} at {self.current_stop} during wait")
+                    self.transport_net.log_event(
+                        f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left), passengers: {len(self.passengers)}")
+                    yield env.timeout(1)
+                    remaining_wait -= 1
 
-                    # boarding during wait
-                    remaining_wait = self.wait_time
-                    while remaining_wait > 0:
-                        q = self.transport_net.passenger_queues[self.current_stop]
-                        while q and len(self.passengers) < self.max_capacity:
-                            p = q.pop(0)
-                            self.passengers.append(p)
-                            self.transport_net.log_event(f"{p.id} boards bus {self.id} at {self.current_stop} during wait")
-                        self.transport_net.log_event(
-                            f"{self.id} waiting at {self.current_stop} ({remaining_wait}m left), passengers: {len(self.passengers)}")
-                        yield env.timeout(1)
-                        remaining_wait -= 1
-                        
             self.direction *= -1
 
 
@@ -286,13 +225,13 @@ class TransportNet:
         self.env.process(self.passenger_generator())
         self.env.process(self.report_status())
         self.schedule_vehicles()
-        
+
         def clock_tick():
             while self.simulation_running:
-                self.env.run(until=self.env.now + 1)  
-                
+                self.env.run(until=self.env.now + 1)
+
                 print(f"[{get_time(self.env.now)}]", end='')
-                
+
                 if self.log_buffer:
                     print()
                     for msg in self.log_buffer:
@@ -300,21 +239,21 @@ class TransportNet:
                     self.log_buffer = []
                 else:
                     print(" ...")
-                
-                time.sleep(0.5)  
-                
+
+                time.sleep(0.5)
+
         return clock_tick
 
     def run_simulation(self):
         self.simulation_running = True
         clock_ticker = self.run_env()
         sim_thread = threading.Thread(target=clock_ticker)
-        sim_thread.daemon = True 
+        sim_thread.daemon = True
         sim_thread.start()
-        
+
         try:
             while sim_thread.is_alive():
-                time.sleep(0.1) 
+                time.sleep(0.1)
         except KeyboardInterrupt:
             print("\nSimulation stopped by user.")
             self.simulation_running = False
