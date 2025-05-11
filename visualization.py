@@ -2,6 +2,7 @@ import pygame
 import sys
 from class_definition import TransportNet
 
+# count the number of passengers for each destination
 def count_destinations(passengers):
     counts = {}
     for p in passengers:
@@ -11,32 +12,13 @@ def count_destinations(passengers):
             counts[p.destination] = 1
     return counts
 
+# display the number of passengers for each destination
 def show_destinations(dest_counts, font, surface, position, color):
     x, y = position
     for dest, count in dest_counts.items():
         y += 15
         label = font.render(f"{dest}: {count}", True, color)
         surface.blit(label, (x, y))
-
-def get_vehicle_position(vehicle, stops_coords):
-    idx = vehicle.position_index
-    route = vehicle.route
-
-    if vehicle.direction == 1 and idx < len(route) - 1:
-        a, b = route[idx], route[idx + 1]
-    elif vehicle.direction == -1 and idx > 0:
-        a, b = route[idx], route[idx - 1]
-    else:
-        a = b = route[idx]
-
-    x1, y1 = stops_coords[a]
-    x2, y2 = stops_coords[b]
-    t = vehicle.progress
-    x = x1 + (x2 - x1) * t
-    y = y1 + (y2 - y1) * t
-
-    return x, y
-
 
 def run_with_pygame(tn: TransportNet, until=60):
     pygame.init()
@@ -52,6 +34,7 @@ def run_with_pygame(tn: TransportNet, until=60):
         "E": (200, 300),
         "F": (200, 450)
     }
+    tn.stop_locations = stops_coords
 
     tn.add_bus_line("Line1", ["A","B","C","D","E","F"], ["00:05"], wait_time=5)
     tn.add_bus_line("Line2", ["F","E","D","C"], ["00:10"], wait_time=3)
@@ -92,7 +75,7 @@ def run_with_pygame(tn: TransportNet, until=60):
 
                 # click on a vehicle
                 for vehicle in tn.vehicles:
-                    x, y = get_vehicle_position(vehicle, stops_coords)
+                    x, y = vehicle.get_coordinates()
                     if (mx-x)**2 + (my-y)**2 <= 6**2:
                         selected_bus = vehicle
                         selected_stop = None
@@ -107,11 +90,15 @@ def run_with_pygame(tn: TransportNet, until=60):
         surface = pygame.Surface((600,600))
         surface.fill((255,255,255))
 
-        for u,vehicle,data in tn.graph.edges(data=True):
-            if u in stops_coords and vehicle in stops_coords:
-                col = (255,0,0) if data.get("busy") else (150,150,150)
-                pygame.draw.line(surface, col, stops_coords[u], stops_coords[vehicle], 2)
+        # draw the lines
+        for start_stop, end_stop, data in tn.graph.edges(data=True):
+            color = (0, 0, 0)
+            # color busy lines red
+            if data.get("busy"):
+                color = (255, 0, 0)
+            pygame.draw.line(surface, color, stops_coords[start_stop], stops_coords[end_stop], 2)
 
+        # draw the stops
         for name, position in stops_coords.items():
             x, y = position
             pygame.draw.circle(surface, (0,0,255), position, 8)
@@ -123,8 +110,9 @@ def run_with_pygame(tn: TransportNet, until=60):
                 count = count_destinations(tn.passenger_queues[name])
                 show_destinations(count, font, surface, (position[0] + 10, position[1]), (100, 100, 100))
 
+        # draw the vehicles
         for vehicle in tn.vehicles:
-            x, y = get_vehicle_position(vehicle, stops_coords)
+            x, y = vehicle.get_coordinates()
 
             if vehicle.id.startswith("Line1"):
                 color = (255, 0, 0)
@@ -143,7 +131,7 @@ def run_with_pygame(tn: TransportNet, until=60):
 
         screen.blit(surface, (0,0))
         pygame.display.flip()
-        clock.tick(3)
+        clock.tick(2) # 2 FPS
 
     pygame.quit()
 

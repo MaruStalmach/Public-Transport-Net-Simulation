@@ -90,17 +90,10 @@ class Vehicle:
                     self.position_index = i
                     self.progress = step / steps
 
-                    # aproximate the position between stops
+                    # record position during movement
                     if current_stop in self.transport_net.stop_locations and next_stop in self.transport_net.stop_locations:
-                        start_lat, start_lon = self.transport_net.stop_locations[current_stop]
-                        end_lat, end_lon = self.transport_net.stop_locations[next_stop]
-
-                        progress = step / steps
-                        lat = start_lat + (end_lat - start_lat) * progress
-                        lon = start_lon + (end_lon - start_lon) * progress
-
-                        # record position during movement
-                        self.record_position(env,f"{current_stop} -> {next_stop}", lat, lon, next_stop, in_transit=True, progress=progress)
+                        lat, lon = self.get_coordinates()
+                        self.record_position(env,f"{current_stop} -> {next_stop}", lat, lon, next_stop, in_transit=True, progress=self.progress)
 
                     yield env.timeout(travel_time / steps)
 
@@ -174,6 +167,25 @@ class Vehicle:
 
             self.direction *= -1
 
+
+    def get_coordinates(self):
+        idx = self.position_index
+        # get the next stop based on the direction
+        if self.direction == 1 and idx < len(self.route) - 1:
+            next_idx = idx + 1
+        elif self.direction == -1 and idx > 0:
+            next_idx = idx - 1
+        else:
+            next_idx = idx
+
+        a, b = self.route[idx], self.route[next_idx]
+        x1, y1 = self.transport_net.stop_locations[a]
+        x2, y2 = self.transport_net.stop_locations[b]
+        t = self.progress
+        # approximate the position between stops
+        x = x1 + (x2 - x1) * t
+        y = y1 + (y2 - y1) * t
+        return x, y
 
 class BusLine:
     def __init__(self, name, stops, schedule, wait_time=5):
