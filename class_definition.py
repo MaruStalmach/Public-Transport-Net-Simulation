@@ -144,6 +144,10 @@ class Vehicle:
                 boarding_count = len(boarding)
                 self.transport_net.log_event(f"{self.id} arrived at {next_stop}: exiting {exiting_count}, boarding {boarding_count}")
 
+                # wait at each stop for one minute
+                self.transport_net.log_event(f"{self.id} is at {self.current_stop}")
+                yield env.timeout(1)
+
             # last stop
             if len(self.route) > 1:
                 # board up to capacity
@@ -274,6 +278,11 @@ class TransportNet:
             for vehicle in self.vehicles:
                 print(f"Line {vehicle.id}: {vehicle.current_stop}, direction: {vehicle.direction}, "
                       f"passengers: {len(vehicle.passengers)}/{vehicle.max_capacity}")
+            if self.log_buffer:
+                print("\n--- Log Buffer ---")
+                for msg in self.log_buffer:
+                    print(msg)
+                self.log_buffer.clear()
             print("================================\n")
             yield self.env.timeout(1)
 
