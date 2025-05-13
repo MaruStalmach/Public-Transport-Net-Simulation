@@ -26,26 +26,6 @@ def run_with_pygame(tn: TransportNet, until=60):
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 14)
 
-    stops_coords = {
-        "A": (100, 200),
-        "B": (300, 100),
-        "C": (500, 200),
-        "D": (400, 300),
-        "E": (200, 300),
-        "F": (200, 450)
-    }
-    tn.stop_locations = stops_coords
-
-    tn.add_bus_line("Line1", ["A","B","C","D","E","F"], ["00:05"], wait_time=5)
-    tn.add_bus_line("Line2", ["F","E","D","C"], ["00:10"], wait_time=3)
-
-    for line in tn.bus_lines:
-        for departure in line.schedule:
-            tn.env.process(tn.create_vehicle(line, departure))
-
-    tn.env.process(tn.passenger_generator(interval=5))
-    tn.env.process(tn.report_status())
-
     paused = False
     selected_stop = None
     selected_bus = None
@@ -66,7 +46,7 @@ def run_with_pygame(tn: TransportNet, until=60):
                 mx, my = event.pos
 
                 # click on a stop
-                for name, (x, y) in stops_coords.items():
+                for name, (x, y) in tn.stop_locations.items():
                     if (mx-x)**2 + (my-y)**2 <= 8**2:
                         selected_stop = name
                         selected_bus = None
@@ -96,10 +76,10 @@ def run_with_pygame(tn: TransportNet, until=60):
             # color busy lines red
             if data.get("busy"):
                 color = (255, 0, 0)
-            pygame.draw.line(surface, color, stops_coords[start_stop], stops_coords[end_stop], 2)
+            pygame.draw.line(surface, color, tn.stop_locations[start_stop], tn.stop_locations[end_stop], 2)
 
         # draw the stops
-        for name, position in stops_coords.items():
+        for name, position in tn.stop_locations.items():
             x, y = position
             pygame.draw.circle(surface, (0,0,255), position, 8)
             label = font.render(f"{name} ({len(tn.passenger_queues.get(name))})", True, (0,0,0))
@@ -134,15 +114,3 @@ def run_with_pygame(tn: TransportNet, until=60):
         clock.tick(2) # 2 FPS
 
     pygame.quit()
-
-if __name__ == "__main__":
-    tn = TransportNet()
-
-    tn.add_connection("A","B",5)
-    tn.add_connection("B","C",7)
-    tn.add_connection("C","D",4,busy=True)
-    tn.add_connection("D","E",6)
-    tn.add_connection("E","A",5)
-    tn.add_connection("E","F",8)
-
-    run_with_pygame(tn, until=60*24)

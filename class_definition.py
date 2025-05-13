@@ -191,7 +191,10 @@ class BusLine:
     def __init__(self, name, stops, schedule, wait_time=5):
         self.name = name
         self.stops = stops
-        self.schedule = [time_to_minutes(t) for t in schedule]
+        if isinstance(schedule, (list, tuple)):
+            self.schedule = [time_to_minutes(t) for t in schedule]
+        else:
+            self.schedule = [time_to_minutes(schedule)]
         self.wait_time = wait_time
 
 
