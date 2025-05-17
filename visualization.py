@@ -26,18 +26,19 @@ def run_with_pygame(tn: TransportNet, until=60):
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 14)
 
-    stops_coords = {
-        "A": (100, 200),
-        "B": (300, 100),
-        "C": (500, 200),
-        "D": (400, 300),
-        "E": (200, 300),
-        "F": (200, 450)
-    }
-    tn.stop_locations = stops_coords
+    # stops_coords = {
+    #     "A": (100, 200),
+    #     "B": (300, 100),
+    #     "C": (500, 200),
+    #     "D": (400, 300),
+    #     "E": (200, 300),
+    #     "F": (200, 450)
+    # }
+    
+    stops_coords = tn.stop_locations 
 
-    tn.add_bus_line("Line1", ["A","B","C","D","E","F"], ["00:05"], wait_time=5)
-    tn.add_bus_line("Line2", ["F","E","D","C"], ["00:10"], wait_time=3)
+    # tn.add_bus_line("Line1", ["A","B","C","D","E","F"], ["00:05"], wait_time=5)
+    # tn.add_bus_line("Line2", ["F","E","D","C"], ["00:10"], wait_time=3)
 
     for line in tn.bus_lines:
         for departure in line.schedule:
@@ -135,14 +136,14 @@ def run_with_pygame(tn: TransportNet, until=60):
 
     pygame.quit()
 
-if __name__ == "__main__":
-    tn = TransportNet()
+# if __name__ == "__main__":
+#     tn = TransportNet()
 
-    tn.add_connection("A","B",5)
-    tn.add_connection("B","C",7)
-    tn.add_connection("C","D",4,busy=True)
-    tn.add_connection("D","E",6)
-    tn.add_connection("E","A",5)
-    tn.add_connection("E","F",8)
+#     tn.add_connection("A","B",5)
+#     tn.add_connection("B","C",7)
+#     tn.add_connection("C","D",4,busy=True)
+#     tn.add_connection("D","E",6)
+#     tn.add_connection("E","A",5)
+#     tn.add_connection("E","F",8)
 
-    run_with_pygame(tn, until=60*24)
+#     run_with_pygame(tn, until=60*24)

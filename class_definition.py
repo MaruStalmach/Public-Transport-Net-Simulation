@@ -182,6 +182,7 @@ class Vehicle:
         x1, y1 = self.transport_net.stop_locations[a]
         x2, y2 = self.transport_net.stop_locations[b]
         t = self.progress
+        
         # approximate the position between stops
         x = x1 + (x2 - x1) * t
         y = y1 + (y2 - y1) * t
