@@ -24,18 +24,34 @@ class Passenger:
         self.status = "waiting"
         self.route = nx.dijkstra_path(transport_net.graph, origin, destination, weight='travel_time')
 
+        path_key = (origin, destination)
+        if path_key in transport_net.path_cache:
+            self.route = transport_net.path_cache[path_key]
+        else:
+            self.route = nx.dijkstra_path(transport_net.graph, origin, destination, weight='travel_time')
+            transport_net.path_cache[path_key] = self.route
+
+    # def deduct_from_satisfaction(self):
+    #     if self.satisfaction > 0:
+    #         self.satisfaction -= 1
+
 class Vehicle:
-    def __init__(self, id, stops, transport_net, max_capacity=30, wait_time=15):
+    def __init__(self, id, stops, transport_net, vehicle_capacity=30, wait_time=15):
         self.id = id
         self.route = stops
         self.transport_net = transport_net
         self.current_stop = stops[0]
         self.passengers = []
-        self.max_capacity = max_capacity
+        self.vehicle_capacity = vehicle_capacity
         self.position_index = 0
         self.progress = 0.0
         self.direction = 1
         self.wait_time = wait_time
+
+        self.distance_traveled = 0
+        self.start_time = transport_net.env.now
+        self.scheduled_arrivals = {}  # Track scheduled vs actual arrivals
+        self.arrival_deviation = []
 
     def has_delay(self, current_stop, next_stop, current_minute):
         is_rush = (420 <= current_minute <= 540) or (960 <= current_minute <= 1080)
@@ -58,7 +74,7 @@ class Vehicle:
             "lon": lon,
             "direction": self.direction,
             "passenger_count": len(self.passengers),
-            "max_capacity": self.max_capacity,
+            "vehicle_capacity": self.vehicle_capacity,
             "destinations": dict(sorted(destination_counts.items())),
             "next_stop": next_stop,
             "in_transit": in_transit,
@@ -117,6 +133,7 @@ class Vehicle:
                 for p in exiting:
                     self.transport_net.log_event(f"{p.id} gets off at {next_stop}")
                     self.passengers.remove(p)
+                    self.transport_net.completed_passengers.append(p)
 
                 waiting = self.transport_net.passenger_queues[next_stop]
                 boarding = []
@@ -126,7 +143,7 @@ class Vehicle:
                         passenger_idx = self.route.index(p.destination)
                         stop_idx = self.route.index(next_stop)
                         if (self.direction == 1 and passenger_idx > stop_idx) or (self.direction == -1 and passenger_idx < stop_idx):
-                            if len(self.passengers) < self.max_capacity:
+                            if len(self.passengers) < self.vehicle_capacity:
                                 boarding.append(p)
                                 self.passengers.append(p)
                                 self.transport_net.log_event(f"{p.id} boards at {next_stop}")
@@ -146,7 +163,7 @@ class Vehicle:
                 # board up to capacity
                 new_board = 0
                 q = self.transport_net.passenger_queues[self.current_stop]
-                while q and len(self.passengers) < self.max_capacity:
+                while q and len(self.passengers) < self.vehicle_capacity:
                     p = q.pop(0)
                     self.passengers.append(p)
                     new_board += 1
@@ -156,7 +173,7 @@ class Vehicle:
                 remaining_wait = self.wait_time
                 while remaining_wait > 0:
                     q = self.transport_net.passenger_queues[self.current_stop]
-                    while q and len(self.passengers) < self.max_capacity:
+                    while q and len(self.passengers) < self.vehicle_capacity:
                         p = q.pop(0)
                         self.passengers.append(p)
                         self.transport_net.log_event(f"{p.id} boards bus {self.id} at {self.current_stop} during wait")
@@ -189,16 +206,18 @@ class Vehicle:
         return x, y
 
 class BusLine:
-    def __init__(self, name, stops, schedule, wait_time=5):
+    def __init__(self, name, stops, schedule, capacity, wait_time=5):
         self.name = name
         self.stops = stops
         self.schedule = [time_to_minutes(t) for t in schedule]
+        self.capacity = capacity
         self.wait_time = wait_time
-
+       
 
 class TransportNet:
-    def __init__(self):
+    def __init__(self, config):
         self.graph = nx.DiGraph()
+        self.config = config
         self.vehicles = []
         self.env = simpy.Environment()
         self.passenger_queues = {}
@@ -210,7 +229,38 @@ class TransportNet:
         self.bus_tracks = {}
         self.stop_snapshots = {}
 
+        self.completed_passengers = []
+
+        self.completed_passengers = []
+        self.path_cache = {}
+
+    def setup_transport_network(self):
+        # add stop locations
+        self.stop_locations = self.config.stop_locations
+        
+        # initialise params from config
+        self.satisfaction_decay_waiting = self.config.satisfaction_decay_waiting
+        self.satisfaction_decay_traveling = self.config.satisfaction_decay_traveling
+        self.rush_hour_traffic_factor = self.config.rush_hour_traffic_factor
+        self.busy_route_factor = self.config.busy_route_factor
+    
+        # add connections
+        for conn in self.config.connections:
+            self.add_connection(conn[0], conn[1], conn[2], busy=conn[3])
+        
+        # add buslines & capacity
+        for line_config in self.config.bus_lines:
+            self.add_bus_line(
+                name=line_config["name"],
+                stops=line_config["stops"],
+                schedule=line_config["schedule"],
+                capacity=line_config.get("capacity", 60),
+                wait_time=line_config["wait_time"]
+            )
+        
+
     def add_connection(self, A, B, travel_time, busy=False):
+        '''defines a new connection between stops on a busline'''
         self.graph.add_edge(A, B, travel_time=travel_time, busy=busy)
         self.graph.add_edge(B, A, travel_time=travel_time, busy=busy)
         if A not in self.passenger_queues:
@@ -218,8 +268,9 @@ class TransportNet:
         if B not in self.passenger_queues:
             self.passenger_queues[B] = []
 
-    def add_bus_line(self, name, stops, schedule, wait_time=5):
-        self.bus_lines.append(BusLine(name, stops, schedule, wait_time))
+    def add_bus_line(self, name, stops, schedule, capacity, wait_time=5):
+        '''defines a new busline in the simulation'''
+        self.bus_lines.append(BusLine(name, stops, schedule, capacity, wait_time))
 
     def schedule_vehicles(self):
         for line in self.bus_lines:
@@ -229,29 +280,30 @@ class TransportNet:
     def create_vehicle(self, line, departure_time):
         yield self.env.timeout(departure_time)
         vehicle_id = f"{line.name}_{get_time(departure_time)}"
+
         vehicle = Vehicle(vehicle_id, line.stops, self, wait_time=line.wait_time)
         self.vehicles.append(vehicle)
         self.bus_tracks[vehicle_id] = []
         self.env.process(vehicle.vehicle_process(self.env))
 
     def passenger_generator(self, interval=5, peak_hours=(7*60, 9*60, 16*60, 18*60)):
+        '''generates passengers on the stops; number of generated passengers depends on the hour - rush hours yield more passengers'''
         id = 0
-        while True:
-            # current_minute = self.env.now % 1440
-            # is_peak = (peak_hours[0] <= current_minute <= peak_hours[1]) or \
-            #           (peak_hours[2] <= current_minute <= peak_hours[3])
-            # is_night = 0 <= current_minute <= 4 * 60
-            #
-            # if is_peak:
-            #     spawn_interval = random.randint(1, max(1, interval // 2))
-            # elif is_night:
-            #     spawn_interval = random.randint(10, 30)
-            # else:
-            #     spawn_interval = random.randint(5, 10)
-            #
-            # yield self.env.timeout(spawn_interval)
 
-            yield self.env.timeout(1)
+        while True:
+            current_minute = self.env.now % 1440
+            is_peak = (peak_hours[0] <= current_minute <= peak_hours[1]) or (peak_hours[2] <= current_minute <= peak_hours[3])
+            is_night = 0 <= current_minute <= 4 * 60
+            
+            if is_peak:
+                spawn_interval = random.randint(1, max(1, interval // 2))
+            elif is_night:
+                spawn_interval = random.randint(10, 30)
+            else:
+                spawn_interval = random.randint(5, 10)
+            
+            yield self.env.timeout(spawn_interval)
+
             for _ in range(5):
                 origin, destination = random.sample(list(self.graph.nodes()), 2)
                 p = Passenger(f"Passenger{id}", origin, destination, self.env.now, transport_net=self)
@@ -267,7 +319,7 @@ class TransportNet:
             current_time = int(self.env.now)
             self.stop_snapshots[current_time] = {}
 
-            # Report on bus stops
+            # report on bus stops
             for stop in sorted(self.passenger_queues):
                 passengers = self.passenger_queues[stop]
                 dest_counts = {}
@@ -287,10 +339,10 @@ class TransportNet:
                     "destinations": dict(sorted(dest_counts.items()))
                 }
 
-            # Report on vehicles
+            # report on vehicles
             for vehicle in self.vehicles:
                 print(f"Line {vehicle.id}: {vehicle.current_stop}, direction: {vehicle.direction}, "
-                      f"passengers: {len(vehicle.passengers)}/{vehicle.max_capacity}")
+                      f"passengers: {len(vehicle.passengers)}/{vehicle.vehicle_capacity}")
             if self.log_buffer:
                 print("\n--- Log Buffer ---")
                 for msg in self.log_buffer:
