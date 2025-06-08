@@ -93,18 +93,19 @@ class RealTimeMetrics:
             total += len(vehicle.passengers)
         return total
     
-    def calculate_on_time_performance(self):
-        """Calculate percentage of on-time arrivals"""
-        on_time_count = 0
-        total_arrivals = 0
+    # def calculate_on_time_performance(self):
+    #     """Calculate percentage of on-time arrivals"""
+    #     on_time_count = 0
+    #     total_arrivals = 0
         
-        for vehicle in self.tn.vehicles:
-            # assuming any delay < 2 minutes is on time
-            if hasattr(vehicle, "arrival_deviation") and vehicle.arrival_deviation <= 2:
-                on_time_count += 1
-            total_arrivals += 1
+    #     for vehicle in self.tn.vehicles:
+    #         # assuming any delay < 2 minutes is on time
+    #         if hasattr(vehicle, "arrival_deviation"):
+    #             if vehicle.arrival_deviation <= 2:
+    #                 on_time_count += 1
+    #             total_arrivals += 1
             
-        return (on_time_count / total_arrivals) * 100 if total_arrivals > 0 else 100
+        # return (on_time_count / total_arrivals) * 100 if total_arrivals > 0 else 100
 
 
     def update_metrics(self):
@@ -116,7 +117,7 @@ class RealTimeMetrics:
             avg_wait = self.calculate_avg_wait_time()
             utilization = self.calculate_vehicle_utilization()
             passengers = self.calculate_passengers_in_system()
-            on_time = self.calculate_on_time_performance()
+            # on_time = self.calculate_on_time_performance()
             
             self.time_data.append(current_time)
             self.satisfaction_data.append(satisfaction)
@@ -124,7 +125,7 @@ class RealTimeMetrics:
             self.avg_wait_time_data.append(avg_wait)
             self.vehicle_utilization_data.append(utilization)
             self.passengers_in_system_data.append(passengers)
-            self.on_time_performance_data.append(on_time)
+            # self.on_time_performance_data.append(on_time)
 
 
 def count_destinations(passengers):
