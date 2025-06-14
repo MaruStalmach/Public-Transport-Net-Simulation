@@ -65,52 +65,52 @@ class SimulationReport:
             self.summary["avg_system_efficiency"] = (
                 sum(self.metrics.system_efficiency_data) / len(self.metrics.system_efficiency_data))
         
-        # cost efficiency estimate
-        self.summary["estimated_cost_per_passenger"] = self.estimate_cost_efficiency()
+        # # cost efficiency estimate
+        # self.summary["estimated_cost_per_passenger"] = self.estimate_cost_efficiency()
         
-        # on-time performance
-        self.summary["on_time_performance"] = self.calculate_on_time_performance()
+        # # on-time performance
+        # self.summary["on_time_performance"] = self.calculate_on_time_performance()
     
-    def estimate_cost_efficiency(self):
-        """Estimate operational cost per passenger (simplified model)"""
-        # cost factors
-        vehicle_cost_per_minute = 0.10  # $0.10 per minute per vehicle
-        distance_cost_per_km = 0.20  # $0.20 per km
+    # def estimate_cost_efficiency(self):
+    #     """Estimate operational cost per passenger (simplified model)"""
+    #     # cost factors
+    #     vehicle_cost_per_minute = 0.10  # $0.10 per minute per vehicle
+    #     distance_cost_per_km = 0.20  # $0.20 per km
         
-        total_cost = 0
-        total_passengers = self.summary["total_passengers"]
+    #     total_cost = 0
+    #     total_passengers = self.summary["total_passengers"]
         
-        # talculate costs for each vehicle
-        for vehicle in self.tn.vehicles:
-            # Time-based cost
-            operating_time = self.tn.env.now - vehicle.start_time
-            time_cost = operating_time * vehicle_cost_per_minute
+    #     # talculate costs for each vehicle
+    #     for vehicle in self.tn.vehicles:
+    #         # Time-based cost
+    #         operating_time = self.tn.env.now - vehicle.start_time
+    #         time_cost = operating_time * vehicle_cost_per_minute
             
-            # distance-based cost (simplified - using Euclidean distance)
-            distance = 0
-            for i in range(len(vehicle.route) - 1):
-                x1, y1 = self.tn.stop_locations[vehicle.route[i]]
-                x2, y2 = self.tn.stop_locations[vehicle.route[i+1]]
-                distance += ((x2-x1)**2 + (y2-y1)**2)**0.5 / 100  # scale to km
+    #         # distance-based cost (simplified - using Euclidean distance)
+    #         distance = 0
+    #         for i in range(len(vehicle.route) - 1):
+    #             x1, y1 = self.tn.stop_locations[vehicle.route[i]]
+    #             x2, y2 = self.tn.stop_locations[vehicle.route[i+1]]
+    #             distance += ((x2-x1)**2 + (y2-y1)**2)**0.5 / 100  # scale to km
                 
-            distance_cost = distance * distance_cost_per_km
+    #         distance_cost = distance * distance_cost_per_km
             
-            total_cost += time_cost + distance_cost
+    #         total_cost += time_cost + distance_cost
         
-        return total_cost / total_passengers if total_passengers > 0 else 0
+    #     return total_cost / total_passengers if total_passengers > 0 else 0
     
-    def calculate_on_time_performance(self):
-        """Calculate percentage of on-time arrivals"""
-        on_time_count = 0
-        total_arrivals = 0
+    # def calculate_on_time_performance(self):
+    #     """Calculate percentage of on-time arrivals"""
+    #     on_time_count = 0
+    #     total_arrivals = 0
         
-        for vehicle in self.tn.vehicles:
-            # for simplicity, we'll assume any delay < 2 minutes is on time
-            if hasattr(vehicle, "arrival_deviation") and vehicle.arrival_deviation <= 2:
-                on_time_count += 1
-            total_arrivals += 1
+    #     for vehicle in self.tn.vehicles:
+    #         # for simplicity, we'll assume any delay < 2 minutes is on time
+    #         if hasattr(vehicle, "arrival_deviation") and vehicle.arrival_deviation <= 2:
+    #             on_time_count += 1
+    #         total_arrivals += 1
             
-        return (on_time_count / total_arrivals) * 100 if total_arrivals > 0 else 100
+    #     return (on_time_count / total_arrivals) * 100 if total_arrivals > 0 else 100
     
     def save_report(self):
         """Save report to JSON file"""
