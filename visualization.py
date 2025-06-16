@@ -253,7 +253,7 @@ def run_simulation_with_plots(
 
             screen.fill((255, 255, 255))
 
-            network_width = 600
+            network_width = 750
             network_surface = pygame.Surface((network_width, 700))
             network_surface.fill((255, 255, 255))
             
@@ -309,8 +309,8 @@ def run_simulation_with_plots(
             screen.blit(network_surface, (0, 0))
             
             plot_x = network_width + 10
-            plot_width = 380
-            plot_height = 200
+            plot_width = 300
+            plot_height = 160
             vertical_spacing = 10
             horizontal_spacing = 10
             
