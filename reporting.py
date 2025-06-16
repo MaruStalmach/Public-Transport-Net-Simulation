@@ -1,6 +1,8 @@
 # reporting.py
 import json
 import os
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime
 
@@ -9,127 +11,82 @@ class SimulationReport:
         self.config = config
         self.metrics = metrics_tracker
         self.tn = transport_net
-        self.start_time = datetime.now()
+        self.start_time = None
         self.end_time = None
         self.summary = {}
-        
+
+    def set_start_time(self):
+        """Call this when simulation actually starts"""
+        self.start_time = datetime.now()
 
     def finalize(self):
         '''collect final statistics and generate report'''
         self.end_time = datetime.now()
         self.calculate_summary()
-        
         if self.config.save_reports:
             self.save_report()
             self.generate_plots()
-        
         return self.summary
-    
+
     def calculate_summary(self):
         '''calculate key performance indicators'''
-        # basic simulation info
         self.summary["simulation_duration"] = self.config.simulation_duration
-        self.summary["real_duration"] = (self.end_time - self.start_time).total_seconds()
         
+        if self.start_time and self.end_time:
+            self.summary["real_duration"] = (self.end_time - self.start_time).total_seconds()
+        else:
+            self.summary["real_duration"] = 0.0
+
         # passenger statistics
         total_passengers = sum(len(q) for q in self.tn.passenger_queues.values())
         for vehicle in self.tn.vehicles:
             total_passengers += len(vehicle.passengers)
-            
         self.summary["total_passengers"] = total_passengers
-        
-        # satisfaction metrics
-        if self.metrics.satisfaction_data:
-            self.summary["avg_satisfaction"] = sum(self.metrics.satisfaction_data) / len(self.metrics.satisfaction_data)
-            self.summary["min_satisfaction"] = min(self.metrics.satisfaction_data)
-            self.summary["final_satisfaction"] = self.metrics.satisfaction_data[-1]
-        
-        # delay metrics
-        if self.metrics.total_delay_data:
-            self.summary["total_delay"] = sum(self.metrics.total_delay_data)
-            self.summary["avg_delay_per_passenger"] = (
-                self.summary["total_delay"] / total_passengers if total_passengers > 0 else 0
-            )
-        
-        # wait time metrics
-        if self.metrics.avg_wait_time_data:
-            self.summary["avg_wait_time"] = sum(self.metrics.avg_wait_time_data) / len(self.metrics.avg_wait_time_data)
-            
-        # vehicle utilization
-        if self.metrics.vehicle_utilization_data:
-            self.summary["avg_vehicle_utilization"] = (
-                sum(self.metrics.vehicle_utilization_data) / len(self.metrics.vehicle_utilization_data))
-        
-        # system efficiency
-        if self.metrics.system_efficiency_data:
-            self.summary["avg_system_efficiency"] = (
-                sum(self.metrics.system_efficiency_data) / len(self.metrics.system_efficiency_data))
-        
-        # # cost efficiency estimate
-        # self.summary["estimated_cost_per_passenger"] = self.estimate_cost_efficiency()
-        
-        # # on-time performance
-        # self.summary["on_time_performance"] = self.calculate_on_time_performance()
-    
-    # def estimate_cost_efficiency(self):
-    #     """Estimate operational cost per passenger (simplified model)"""
-    #     # cost factors
-    #     vehicle_cost_per_minute = 0.10  # $0.10 per minute per vehicle
-    #     distance_cost_per_km = 0.20  # $0.20 per km
-        
-    #     total_cost = 0
-    #     total_passengers = self.summary["total_passengers"]
-        
-    #     # talculate costs for each vehicle
-    #     for vehicle in self.tn.vehicles:
-    #         # Time-based cost
-    #         operating_time = self.tn.env.now - vehicle.start_time
-    #         time_cost = operating_time * vehicle_cost_per_minute
-            
-    #         # distance-based cost (simplified - using Euclidean distance)
-    #         distance = 0
-    #         for i in range(len(vehicle.route) - 1):
-    #             x1, y1 = self.tn.stop_locations[vehicle.route[i]]
-    #             x2, y2 = self.tn.stop_locations[vehicle.route[i+1]]
-    #             distance += ((x2-x1)**2 + (y2-y1)**2)**0.5 / 100  # scale to km
-                
-    #         distance_cost = distance * distance_cost_per_km
-            
-    #         total_cost += time_cost + distance_cost
-        
-    #     return total_cost / total_passengers if total_passengers > 0 else 0
-    
-    # def calculate_on_time_performance(self):
-    #     """Calculate percentage of on-time arrivals"""
-    #     on_time_count = 0
-    #     total_arrivals = 0
-        
-    #     for vehicle in self.tn.vehicles:
-    #         # for simplicity, we'll assume any delay < 2 minutes is on time
-    #         if hasattr(vehicle, "arrival_deviation") and vehicle.arrival_deviation <= 2:
-    #             on_time_count += 1
-    #         total_arrivals += 1
-            
-    #     return (on_time_count / total_arrivals) * 100 if total_arrivals > 0 else 100
-    
+
+        # average metrics (those with plots)
+        def avg(data):
+            return sum(data) / len(data) if data else 0
+
+        self.summary["avg_satisfaction"] = avg(self.metrics.satisfaction_data)
+        self.summary["avg_total_delay"] = avg(self.metrics.total_delay_data)
+        self.summary["avg_wait_time"] = avg(self.metrics.avg_wait_time_data)
+        self.summary["avg_vehicle_utilization"] = avg(self.metrics.vehicle_utilization_data)
+        self.summary["avg_passengers_in_system"] = avg(self.metrics.passengers_in_system_data)
+        # on_time_performance_data and cost_efficiency_data may be empty if not calculated
+        if hasattr(self.metrics, "on_time_performance_data"):
+            self.summary["avg_on_time_performance"] = avg(self.metrics.on_time_performance_data)
+        if hasattr(self.metrics, "cost_efficiency_data"):
+            self.summary["avg_cost_efficiency"] = avg(self.metrics.cost_efficiency_data)
+
+        self.summary["final_satisfaction"] = self.metrics.satisfaction_data[-1] if self.metrics.satisfaction_data else None
+        self.summary["final_total_delay"] = self.metrics.total_delay_data[-1] if self.metrics.total_delay_data else None
+
     def save_report(self):
-        """Save report to JSON file"""
+        """Save simplified report to JSON file"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"report_{timestamp}.json"
         filepath = os.path.join(self.config.report_directory, filename)
-        
+
         report_data = {
-            "config": self.config.__dict__,
+            "config": {
+                "simulation_duration": self.config.simulation_duration,
+                "passenger_generation_interval": self.config.passenger_generation_interval,
+                "peak_hours": self.config.peak_hours,
+                "peak_multiplier": self.config.peak_multiplier,
+                "satisfaction_decay_waiting": self.config.satisfaction_decay_waiting,
+                "satisfaction_decay_traveling": self.config.satisfaction_decay_traveling,
+                "rush_hour_traffic_factor": self.config.rush_hour_traffic_factor,
+                "busy_route_factor": self.config.busy_route_factor
+            },
             "summary": self.summary,
-            "start_time": self.start_time.isoformat(),
-            "end_time": self.end_time.isoformat()
+            "start_time": self.start_time.isoformat() if self.start_time else None,
+            "end_time": self.end_time.isoformat() if self.end_time else None
         }
-        
+
         with open(filepath, 'w') as f:
             json.dump(report_data, f, indent=4)
-            
         return filepath
-    
+
     def generate_plots(self):
         """Generate and save metric plots"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -148,7 +105,7 @@ class SimulationReport:
         
         # create system efficiency plot
         plt.figure(figsize=(10, 6))
-        plt.plot(self.metrics.time_data, self.metrics.system_efficiency_data, 'g-')
+        plt.plot(self.metrics.time_data, self.metrics.cost_efficiency_data, 'g-')
         plt.title("System Efficiency Over Time")
         plt.xlabel("Time (minutes)")
         plt.ylabel("Efficiency Score")

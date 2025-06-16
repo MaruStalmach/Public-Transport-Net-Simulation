@@ -20,6 +20,8 @@ class RealTimeMetrics:
         
         self.data_lock = threading.Lock()
         
+        self.vehicle_schedules = {}
+        
     def calculate_satisfaction(self):
         '''calculates customer satisfaction using params for decay settable in config'''
         total_satisfaction = 0
@@ -93,20 +95,43 @@ class RealTimeMetrics:
             total += len(vehicle.passengers)
         return total
     
-    # def calculate_on_time_performance(self):
-    #     """Calculate percentage of on-time arrivals"""
-    #     on_time_count = 0
-    #     total_arrivals = 0
+    def calculate_on_time_performance(self):
+        """Calculate percentage of on-time arrivals (within 2 minutes of schedule)"""
+        on_time_count = 0
+        total_arrivals = 0
         
-    #     for vehicle in self.tn.vehicles:
-    #         # assuming any delay < 2 minutes is on time
-    #         if hasattr(vehicle, "arrival_deviation"):
-    #             if vehicle.arrival_deviation <= 2:
-    #                 on_time_count += 1
-    #             total_arrivals += 1
+        for vehicle in self.tn.vehicles:
+            route_length = len(vehicle.route)
+            if route_length > 1:
+                estimated_cycle_time = route_length * 3
+                current_cycle_progress = (self.tn.env.now % estimated_cycle_time) / estimated_cycle_time
+                expected_position = current_cycle_progress * route_length
+                
+                actual_position = vehicle.position_index + vehicle.progress
+                position_deviation = abs(expected_position - actual_position)
+                
+                if position_deviation <= 2:
+                    on_time_count += 1
+                total_arrivals += 1
             
-        # return (on_time_count / total_arrivals) * 100 if total_arrivals > 0 else 100
+        return (on_time_count / total_arrivals) * 100 if total_arrivals > 0 else 100
 
+    def calculate_cost_efficiency(self):
+        """Calculate cost efficiency as passengers served per vehicle-minute"""
+        if not self.tn.vehicles:
+            return 0
+            
+        passengers_served = len(self.tn.completed_passengers)
+        for vehicle in self.tn.vehicles:
+            passengers_served += len(vehicle.passengers)
+        
+        total_vehicle_minutes = 0
+        for vehicle in self.tn.vehicles:
+            operating_time = self.tn.env.now - vehicle.start_time
+            total_vehicle_minutes += max(1, operating_time)
+        
+        efficiency = passengers_served / total_vehicle_minutes if total_vehicle_minutes > 0 else 0
+        return efficiency * 100
 
     def update_metrics(self):
         """Update all metrics for current simulation time"""
@@ -117,7 +142,8 @@ class RealTimeMetrics:
             avg_wait = self.calculate_avg_wait_time()
             utilization = self.calculate_vehicle_utilization()
             passengers = self.calculate_passengers_in_system()
-            # on_time = self.calculate_on_time_performance()
+            on_time = self.calculate_on_time_performance()
+            cost_eff = self.calculate_cost_efficiency()
             
             self.time_data.append(current_time)
             self.satisfaction_data.append(satisfaction)
@@ -125,7 +151,8 @@ class RealTimeMetrics:
             self.avg_wait_time_data.append(avg_wait)
             self.vehicle_utilization_data.append(utilization)
             self.passengers_in_system_data.append(passengers)
-            # self.on_time_performance_data.append(on_time)
+            self.on_time_performance_data.append(on_time)
+            self.cost_efficiency_data.append(cost_eff)
 
 
 def count_destinations(passengers):
@@ -330,7 +357,7 @@ def run_simulation_with_plots(
                 ("Avg Wait Time (min)", metrics_tracker.avg_wait_time_data, (0, 150, 0), None),
                 ("Vehicle Utilization (%)", metrics_tracker.vehicle_utilization_data, (128, 0, 128), 100),
                 ("Passengers in System", metrics_tracker.passengers_in_system_data, (0, 200, 200), None),
-                ("On-Time Performance (%)", metrics_tracker.on_time_performance_data, (255, 165, 0), 100)
+                ("Cost Efficiency", metrics_tracker.cost_efficiency_data, (255, 100, 0), None)
             ]
             
             with metrics_tracker.data_lock:
