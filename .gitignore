@@ -1,2 +1,4 @@
 # config reports saved
 reports/
+venv/
+__pycache__/

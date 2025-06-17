@@ -121,13 +121,16 @@ if __name__ == "__main__":
 
     # run
     if config.visualize:
+        report = SimulationReport(config, None, tn)
+        report.set_start_time()
         metrics_tracker = run_simulation_with_plots(tn=tn, config=config)
+        report.metrics = metrics_tracker
     else:
         metrics_tracker = None
+        report = None
     
     # generate report
-    if metrics_tracker:
-        report = SimulationReport(config, metrics_tracker, tn)
+    if metrics_tracker and report:
         summary = report.finalize()
         
         print("\n=== SIMULATION REPORT ===")
