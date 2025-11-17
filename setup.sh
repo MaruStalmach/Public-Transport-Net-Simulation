@@ -2,10 +2,11 @@
 
 python3 -m venv venv
 
-# Activate the virtual environment
-echo "Activating the virtual environment..."
+echo "activating the virtual environment..."
 source venv/bin/activate
 
-# Install requirements
-echo "Installing requirements..."
+echo "installing requirements..."
 pip install -r requirements.txt
+
+echo "installing project in editable mode..."
+pip install -e .
