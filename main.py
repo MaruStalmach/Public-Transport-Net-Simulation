@@ -1,25 +1,10 @@
-from class_definition import TransportNet
-from visualization import run_simulation_with_plots
-from config import SimulationConfig
-from reporting import SimulationReport
+from src.transport_analytics.models import TransportNet
+from src.transport_analytics.visualization import run_simulation_with_plots
+from src.transport_analytics.config import SimulationConfig
+from src.transport_analytics.reporting import SimulationReport
+import pandas as pd
 
-stop_locations = {
-    "A": (50, 250),    
-    "B": (250, 150),   
-    "C": (450, 250),   
-    "D": (350, 350),   
-    "E": (150, 350),   
-    "F": (150, 500),   
-    "G": (550, 400),   
-    "H": (650, 300),   
-    "I": (50, 150),    
-    "J": (250, 450),   
-    "K": (450, 500),   
-    "L": (200, 550),   
-    "M": (550, 200),   
-    "N": (350, 550),   
-    "O": (100, 400)    
-}
+stop_locations = pd.read_json(r"example_data/stop_locations.json")
 
 connections = [
     ("A", "B", 5, False),

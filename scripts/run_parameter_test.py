@@ -4,10 +4,10 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-from class_definition import TransportNet
-from config import SimulationConfig
-from reporting import SimulationReport
-from visualization import RealTimeMetrics
+from src.transport_analytics.models import TransportNet
+from src.transport_analytics.config import SimulationConfig
+from src.transport_analytics.reporting import SimulationReport
+from src.transport_analytics.visualization import RealTimeMetrics
 from main import stop_locations, connections, bus_lines
 
 

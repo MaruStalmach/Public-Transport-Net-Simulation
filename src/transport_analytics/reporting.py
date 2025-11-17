@@ -105,13 +105,14 @@ class SimulationReport:
         
         # create system efficiency plot
         plt.figure(figsize=(10, 6))
-        plt.plot(self.metrics.time_data, self.metrics.cost_efficiency_data, 'g-')
-        plt.title("System Efficiency Over Time")
-        plt.xlabel("Time (minutes)")
-        plt.ylabel("Efficiency Score")
-        plt.grid(True, alpha=0.3)
-        plt.savefig(os.path.join(plot_dir, f"efficiency_{timestamp}.png"))
-        plt.close()
+        if self.metrics.cost_efficiency_data:
+            plt.plot(self.metrics.time_data, self.metrics.cost_efficiency_data, 'g-')
+            plt.title("System Efficiency Over Time")
+            plt.xlabel("Time (minutes)")
+            plt.ylabel("Efficiency Score")
+            plt.grid(True, alpha=0.3)
+            plt.savefig(os.path.join(plot_dir, f"efficiency_{timestamp}.png"))
+            plt.close()
         
         # create combined metrics plot
         fig, ax1 = plt.subplots(figsize=(12, 8))

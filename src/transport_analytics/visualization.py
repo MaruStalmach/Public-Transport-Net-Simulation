@@ -1,8 +1,8 @@
 import pygame
 import threading
-from class_definition import TransportNet, get_time
+from src.transport_analytics.models import TransportNet, get_time
 from collections import deque
-from config import SimulationConfig
+from src.transport_analytics.config import SimulationConfig
 
 class RealTimeMetrics:
     def __init__(self, transport_network, max_points=100):

@@ -1,6 +1,6 @@
 # config.py
-import json
-import os
+import json, os
+import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Union
 
@@ -57,7 +57,10 @@ class SimulationConfig:
         filepath = os.path.join(self.report_directory, filename)
         
         with open(filepath, 'w') as f:
-            json.dump(self.__dict__, f, indent=4)
+            config_dict = self.__dict__.copy()
+            if isinstance(self.stop_locations, pd.DataFrame):
+                config_dict['stop_locations'] = self.stop_locations.to_dict()
+            json.dump(config_dict, f, indent=4)
             
         return filepath
     
