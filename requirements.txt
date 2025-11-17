@@ -5,3 +5,4 @@ folium~=0.19.5
 pygame~=2.6.1
 pandas
 seaborn
+pytest~=7.4.0

@@ -24,6 +24,7 @@ class Passenger:
         self.status = "waiting"
         self.route = nx.dijkstra_path(transport_net.graph, origin, destination, weight='travel_time')
 
+        #cache routes
         path_key = (origin, destination)
         if path_key in transport_net.path_cache:
             self.route = transport_net.path_cache[path_key]
