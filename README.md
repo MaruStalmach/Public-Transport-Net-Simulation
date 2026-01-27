@@ -45,14 +45,14 @@ This project simulates a dynamic public transport network where buses operate on
    ```
 
 2. **Install dependencies:**
-   - **Linux/macOS:**
-     ```bash
-     bash setup.sh
-     ```
-   - **Windows:**
-     ```bash
-     setup.bat
-     ```
+**Linux/macOS:**
+```bash
+bash setup.sh
+```
+**Windows:**
+```bash
+setup.bat
+```
 
 3. **Run the simulation:**
    ```bash
